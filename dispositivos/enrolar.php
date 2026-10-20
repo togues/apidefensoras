@@ -32,11 +32,19 @@ if ($codigoComunidad === '') {
 
 $pdo = obDb();
 
+// vigente_desde/vigente_hasta (migracion 010): las dos opcionales, NULL
+// en cualquiera de las dos significa "sin tope de ese lado" — un código
+// sin ninguna de las dos fechas se comporta exactamente como antes.
+// Mismo mensaje y mismo código de error que un código que nunca existió
+// o que está revocado: que un código esté fuera de su ventana no debe
+// distinguirse desde afuera de "no es un código válido".
 $stmt = $pdo->prepare(
     'SELECT cc.id AS codigo_comunidad_id, c.id AS comunidad_id, c.nombre AS comunidad_nombre
      FROM codigo_comunidad cc
      JOIN comunidad c ON c.id = cc.comunidad_id
-     WHERE cc.codigo = :codigo AND cc.activo = TRUE AND c.activo = TRUE'
+     WHERE cc.codigo = :codigo AND cc.activo = TRUE AND c.activo = TRUE
+         AND (cc.vigente_desde IS NULL OR cc.vigente_desde <= NOW())
+         AND (cc.vigente_hasta IS NULL OR cc.vigente_hasta >= NOW())'
 );
 $stmt->execute(['codigo' => strtoupper($codigoComunidad)]);
 $comunidad = $stmt->fetch();

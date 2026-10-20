@@ -76,7 +76,8 @@ if ($metodo === 'GET') {
     )->fetchAll();
 
     $codigos = $pdo->query(
-        "SELECT id, comunidad_id, codigo, activo, fecha_emision FROM codigo_comunidad ORDER BY fecha_emision DESC"
+        "SELECT id, comunidad_id, codigo, activo, fecha_emision, vigente_desde, vigente_hasta
+         FROM codigo_comunidad ORDER BY fecha_emision DESC"
     )->fetchAll();
 
     $cantones = $pdo->query(
