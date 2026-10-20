@@ -1,0 +1,4 @@
+# Observatorio API — no versionar
+.env
+*.log
+var/

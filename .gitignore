@@ -1,0 +1,26 @@
+# apidefensoras — repositorio de la API (PHP) solamente.
+# Sin app móvil, sin panel, sin muro, sin migraciones de base de datos
+# (bd/ vive fuera de esta carpeta): esos van en sus propios
+# repositorios aparte.
+#
+# Nada de esto es opcional por estilo: este backend guarda y protege
+# datos de personas defensoras en riesgo. Cualquier .env real que entre
+# a un commit queda en el historial para siempre, aunque se borre
+# después.
+
+# Cualquier cosa que EMPIECE con ".env" (con "*" pegado, no ".env.*":
+# así cubre también copias accidentales con espacios o paréntesis, como
+# "observatorio/.env (Copiar)", que ".env.*" no habría atrapado). El
+# .example sí se versiona.
+**/.env*
+!**/.env.example
+
+# Datos locales de ejecución — nunca código fuente, siempre contenido
+# generado en tiempo real (fotos subidas, respaldos cifrados, conteo
+# del limitador de tasa). Algunas de estas carpetas ni siquiera se
+# pueden leer desde este usuario (las crea www-data) — mejor razón
+# todavía para que git jamás intente tocarlas.
+observatorio/var/
+
+.DS_Store
+*.log

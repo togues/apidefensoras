@@ -1,0 +1,38 @@
+# No confiar en que el hosting bloquee esto solo por convención: en un
+# hosting compartido básico (el destino de este proyecto, ver CLAUDE.md
+# "Stack") no hay garantía de que el .htaccess raíz del servidor lo
+# haga. .env tiene DB_PASSWORD y no debe poder pedirse por URL.
+# var/ (el registro del limitador de tasa) se protege con SU PROPIO
+# .htaccess al crear la carpeta en el servidor — ver el instructivo de
+# despliegue, docs/08-despliegue.md — porque no viaja en este repositorio
+# (api/observatorio/.gitignore) y una regla acá con la ruta escrita a
+# mano se rompe si algún día esta API no vive en /api/v1/.
+<FilesMatch "^\.env|\.sql$|\.log$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Rutas con {id}/{uuid_local}: una regla explícita por endpoint, no un
+    # router genérico (ver CLAUDE.md, "Stack").
+    RewriteRule ^reportes/([0-9a-fA-F-]+)/evidencias/?$ reportes/evidencias.php?uuid_local=$1 [QSA,L]
+    RewriteRule ^admin/casos/([0-9]+)/publicar/?$ admin/casos-publicar.php?id=$1 [QSA,L]
+    RewriteRule ^admin/casos/([0-9]+)/?$ admin/casos.php?id=$1 [QSA,L]
+    RewriteRule ^admin/anomalias/([0-9]+)/?$ admin/anomalias.php?id=$1 [QSA,L]
+    RewriteRule ^admin/usuarios/([0-9]+)/?$ admin/usuarios.php?id=$1 [QSA,L]
+    RewriteRule ^admin/comunidades/([0-9]+)/codigos/?$ admin/comunidades.php?id=$1 [QSA,L]
+    RewriteRule ^admin/codigos/([0-9]+)/?$ admin/codigos.php?id=$1 [QSA,L]
+    RewriteRule ^admin/evidencias/([0-9]+)/?$ admin/evidencia.php?id=$1 [QSA,L]
+    RewriteRule ^admin/respaldos/configuracion/?$ admin/respaldos.php?accion=configuracion [QSA,L]
+    RewriteRule ^admin/respaldos/([0-9]+)/descargar/?$ admin/respaldos.php?descargar_id=$1 [QSA,L]
+
+    # Oculta la extensión .php para que la URL sea la que documenta
+    # api_v1.md: /catalogos -> catalogos.php, /dispositivos/enrolar ->
+    # dispositivos/enrolar.php.
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}\.php -f
+    RewriteRule ^(.*)$ $1.php [L]
+</IfModule>
