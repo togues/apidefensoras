@@ -15,9 +15,24 @@
  * un archivo estático servido por Apache: sin sesión, 401, igual que
  * cualquier otro endpoint de /admin.
  *
- * No hay `obRequireRolAdministrador()` acá a propósito: revisar
- * evidencia es parte del trabajo de cualquier operador, no solo de
- * quien administra el panel.
+ * DELETE /api/v1/admin/evidencias/{id} — la borra PERMANENTE: la fila
+ * de `evidencia` y el archivo en disco. Sin papelera ni estado
+ * "eliminada" — pedido explícito de Marco (2026-10-20): "no debería
+ * quedar en la base de datos, la eliminó permanentemente". Dos motivos
+ * para que así sea: la foto puede haberse subido por error (lugar
+ * equivocado, foto repetida) y no tiene sentido conservarla solo
+ * porque sí; y a diferencia del relato (regla 6, nunca se edita, todo
+ * el valor probatorio vive en el texto), una fotografía mal tomada o
+ * que ya no hace falta no tiene ese mismo peso — lo que si queda es el
+ * RASTRO de que se borró, como nota en `seguimiento_caso` (abajo), no
+ * la imagen en sí.
+ *
+ * No hay `obRequireRolAdministrador()` para ninguno de los dos métodos,
+ * a propósito: revisar y gestionar la evidencia de un caso —igual que
+ * cambiar su estado o anotar algo— es trabajo de cualquier operador con
+ * sesión, no una acción de administración del sistema como crear
+ * usuarios o comunidades (esas sí la exigen, ver admin/usuarios.php y
+ * admin/comunidades.php).
  *
  * El EXIF ya se depuró y revalidó en reportes/evidencias.php antes de
  * guardarse (chk_evidencia_exif en la base) — servirla acá no repite
@@ -28,9 +43,10 @@ require_once __DIR__ . '/../config.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
-obRequireSesionPanel();
+$usuarioPanel = obRequireSesionPanel();
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+$metodo = $_SERVER['REQUEST_METHOD'] ?? '';
+if ($metodo !== 'GET' && $metodo !== 'DELETE') {
     obJsonResponse(false, null, 'Método no permitido', 405, 'METHOD_NOT_ALLOWED');
 }
 
@@ -40,26 +56,55 @@ if ($id <= 0) {
 }
 
 $pdo = obDb();
-$stmt = $pdo->prepare('SELECT ruta_archivo FROM evidencia WHERE id = :id');
+$stmt = $pdo->prepare('SELECT reporte_id, ruta_archivo FROM evidencia WHERE id = :id');
 $stmt->execute(['id' => $id]);
-$rutaRelativa = $stmt->fetchColumn();
+$fila = $stmt->fetch();
 
-if ($rutaRelativa === false) {
+if ($fila === false) {
     obJsonResponse(false, null, 'Evidencia no encontrada', 404, 'EVIDENCIA_NO_ENCONTRADA');
 }
+$rutaRelativa = $fila['ruta_archivo'];
 
 // `ruta_archivo` la construye el propio servidor al subir la foto
 // (reportes/evidencias.php: reporteId numérico + hash sha256 + una de
 // tres extensiones fijas) — no viene de ningún dato que la persona
 // usuaria controle. Aun así, se valida con realpath() que el archivo
-// resuelto siga dentro de var/evidencias antes de servirlo: defensa en
-// profundidad, no porque haya una vía conocida de escaparse de ahí.
+// resuelto siga dentro de var/evidencias antes de servirlo o borrarlo:
+// defensa en profundidad, no porque haya una vía conocida de escaparse
+// de ahí.
 $baseEvidencias = realpath(__DIR__ . '/../var/evidencias');
 $rutaAbsoluta = realpath(__DIR__ . '/../var/' . $rutaRelativa);
 
 if ($baseEvidencias === false || $rutaAbsoluta === false || !str_starts_with($rutaAbsoluta, $baseEvidencias . DIRECTORY_SEPARATOR)) {
     obApiLog('Ruta de evidencia fuera de lo esperado', ['evidencia_id' => $id]);
     obJsonResponse(false, null, 'Evidencia no encontrada', 404, 'EVIDENCIA_NO_ENCONTRADA');
+}
+
+if ($metodo === 'DELETE') {
+    // La fila sale de la base en la MISMA transacción que la nota de
+    // bitácora, para que nunca quede un seguimiento huérfano sin la
+    // fila que lo originó ni viceversa. El archivo en disco se borra
+    // DESPUÉS de que la transacción ya confirmó: si el unlink fallara
+    // (permisos, carrera), es preferible un archivo huérfano en disco
+    // —se puede limpiar después, sin urgencia— a una fila fantasma en
+    // la base apuntando a un archivo que ya no está.
+    obTransaccion(function (PDO $pdo) use ($id, $fila, $usuarioPanel) {
+        $borrar = $pdo->prepare('DELETE FROM evidencia WHERE id = :id');
+        $borrar->execute(['id' => $id]);
+
+        $seguimiento = $pdo->prepare(
+            'INSERT INTO seguimiento_caso (reporte_id, usuario_id, nota)
+             VALUES (:reporte_id, :usuario_id, :nota)'
+        );
+        $seguimiento->execute([
+            'reporte_id' => $fila['reporte_id'],
+            'usuario_id' => $usuarioPanel['id'],
+            'nota' => 'Eliminó una fotografía de evidencia.',
+        ]);
+    });
+
+    @unlink($rutaAbsoluta);
+    obJsonResponse(true, null, null, 200);
 }
 
 $extension = strtolower(pathinfo($rutaAbsoluta, PATHINFO_EXTENSION));

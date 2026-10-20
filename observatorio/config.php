@@ -160,7 +160,10 @@ function obSetCorsHeaders(): void
         }
     }
 
-    header('Access-Control-Allow-Methods: GET, POST, PATCH, OPTIONS');
+    // DELETE se agregó para admin/evidencia.php (borrar una fotografía
+    // de evidencia, 2026-10-20) — primer endpoint del proyecto que lo
+    // necesita; todo lo demás hasta ahora usaba PATCH.
+    header('Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, X-App-Secret, X-Admin-Key, Authorization, If-None-Match');
     header('Access-Control-Allow-Credentials: true');
 
