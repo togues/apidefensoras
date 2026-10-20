@@ -5,8 +5,8 @@
 # var/ (el registro del limitador de tasa) se protege con SU PROPIO
 # .htaccess al crear la carpeta en el servidor — ver el instructivo de
 # despliegue, docs/08-despliegue.md — porque no viaja en este repositorio
-# (api/observatorio/.gitignore) y una regla acá con la ruta escrita a
-# mano se rompe si algún día esta API no vive en /api/v1/.
+# (.gitignore) y una regla acá con la ruta escrita a mano se rompe si
+# algún día esta API no vive en /api/v1/.
 <FilesMatch "^\.env|\.sql$|\.log$">
     Require all denied
 </FilesMatch>
@@ -24,6 +24,7 @@
     RewriteRule ^admin/anomalias/([0-9]+)/?$ admin/anomalias.php?id=$1 [QSA,L]
     RewriteRule ^admin/usuarios/([0-9]+)/?$ admin/usuarios.php?id=$1 [QSA,L]
     RewriteRule ^admin/comunidades/([0-9]+)/codigos/?$ admin/comunidades.php?id=$1 [QSA,L]
+    RewriteRule ^admin/comunidades/([0-9]+)/?$ admin/comunidades.php?id=$1 [QSA,L]
     RewriteRule ^admin/codigos/([0-9]+)/?$ admin/codigos.php?id=$1 [QSA,L]
     RewriteRule ^admin/evidencias/([0-9]+)/?$ admin/evidencia.php?id=$1 [QSA,L]
     RewriteRule ^admin/respaldos/configuracion/?$ admin/respaldos.php?accion=configuracion [QSA,L]

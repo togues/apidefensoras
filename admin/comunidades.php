@@ -66,13 +66,15 @@ function obGenerarCodigoComunidad(PDO $pdo, string $nombreCanton): string
 }
 
 if ($metodo === 'GET') {
+    // Sin WHERE co.activo = TRUE: igual que admin/usuarios.php, una
+    // comunidad desactivada sigue en la lista (al final) para poder
+    // reactivarla — nunca desaparece de golpe.
     $comunidades = $pdo->query(
-        "SELECT co.id, co.nombre, co.tipo, ct.nombre AS canton,
+        "SELECT co.id, co.nombre, co.tipo, co.activo, ct.nombre AS canton,
                 (SELECT COUNT(*) FROM dispositivo d WHERE d.comunidad_id = co.id AND d.activo = TRUE) AS personas_inscritas
          FROM comunidad co
              LEFT JOIN canton ct ON ct.id = co.canton_id
-         WHERE co.activo = TRUE
-         ORDER BY co.nombre"
+         ORDER BY co.activo DESC, co.nombre"
     )->fetchAll();
 
     $codigos = $pdo->query(
@@ -97,6 +99,7 @@ if ($metodo === 'GET') {
 
     obJsonResponse(true, [
         'comunidades' => array_map(static function (array $co) use ($codigosPorComunidad): array {
+            $co['activo'] = (bool) $co['activo'];
             $co['personas_inscritas'] = (int) $co['personas_inscritas'];
             $co['codigos'] = $codigosPorComunidad[$co['id']] ?? [];
             return $co;
@@ -152,6 +155,54 @@ if ($metodo === 'POST' && $id !== null) {
     $insertar->execute(['id' => $id, 'codigo' => $codigo]);
 
     obJsonResponse(true, ['id' => (int) $insertar->fetchColumn(), 'codigo' => $codigo], null, 201);
+}
+
+if ($metodo === 'PATCH') {
+    // PATCH /admin/comunidades/{id} — editar nombre/tipo, o
+    // desactivar/reactivar (igual que admin/usuarios.php: nunca se
+    // borra, se desactiva). Nunca toca canton_id ni geom acá: mudar
+    // una comunidad de cantón es un caso raro y mejor hecho a mano,
+    // con cuidado, no de un campo de texto suelto en este formulario.
+    if ($id === null) {
+        obJsonResponse(false, null, 'Falta el id de la comunidad', 400, 'DATOS_INCOMPLETOS');
+    }
+    $existe = $pdo->prepare('SELECT id FROM comunidad WHERE id = :id');
+    $existe->execute(['id' => $id]);
+    if (!$existe->fetchColumn()) {
+        obJsonResponse(false, null, 'Comunidad no encontrada', 404, 'COMUNIDAD_NO_ENCONTRADA');
+    }
+
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    $campos = [];
+    $parametros = ['id' => $id];
+
+    if (array_key_exists('nombre', $body)) {
+        $nombre = trim((string) $body['nombre']);
+        if ($nombre === '') {
+            obJsonResponse(false, null, 'El nombre no puede quedar vacío', 400, 'DATOS_INVALIDOS');
+        }
+        $campos[] = 'nombre = :nombre';
+        $parametros['nombre'] = $nombre;
+    }
+    if (array_key_exists('tipo', $body)) {
+        $campos[] = 'tipo = :tipo';
+        $parametros['tipo'] = trim((string) $body['tipo']);
+    }
+    if (array_key_exists('activo', $body)) {
+        // PHP false -> PDO lo manda como '' con EMULATE_PREPARES=false
+        // contra pgsql, y una columna boolean rechaza esa cadena vacía
+        // (mismo bug ya encontrado en bd/restaurar-respaldo.php) — se
+        // castea a texto 'true'/'false' antes de bindearlo.
+        $campos[] = 'activo = :activo';
+        $parametros['activo'] = $body['activo'] ? 'true' : 'false';
+    }
+
+    if ($campos === []) {
+        obJsonResponse(false, null, 'Nada que actualizar', 400, 'DATOS_INCOMPLETOS');
+    }
+
+    $pdo->prepare('UPDATE comunidad SET ' . implode(', ', $campos) . ' WHERE id = :id')->execute($parametros);
+    obJsonResponse(true, ['actualizado' => true], null, 200);
 }
 
 obJsonResponse(false, null, 'Método no permitido', 405, 'METHOD_NOT_ALLOWED');
