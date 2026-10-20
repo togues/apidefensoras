@@ -3,14 +3,21 @@
 # (bd/ vive fuera de esta carpeta): esos van en sus propios
 # repositorios aparte.
 #
+# La raíz de este repo se sube TAL CUAL a la raíz de api/v1/ en el
+# servidor (local-dir: ./, server-dir: ./) — por eso los archivos PHP
+# van sueltos acá, sin una carpeta "observatorio/" envolviéndolos. Con
+# esa carpeta de más, el deploy automático sube todo a
+# api/v1/observatorio/... y nunca toca los archivos reales que sirven
+# api/v1/ — encontrado el 20 de octubre de 2026, cuando el primer
+# deploy automático de este repo no cambió nada en producción.
+#
 # Nada de esto es opcional por estilo: este backend guarda y protege
 # datos de personas defensoras en riesgo. Cualquier .env real que entre
 # a un commit queda en el historial para siempre, aunque se borre
 # después.
 
 # Cualquier cosa que EMPIECE con ".env" (con "*" pegado, no ".env.*":
-# así cubre también copias accidentales con espacios o paréntesis, como
-# "observatorio/.env (Copiar)", que ".env.*" no habría atrapado). El
+# así cubre también copias accidentales con espacios o paréntesis). El
 # .example sí se versiona.
 **/.env*
 !**/.env.example
@@ -20,7 +27,7 @@
 # del limitador de tasa). Algunas de estas carpetas ni siquiera se
 # pueden leer desde este usuario (las crea www-data) — mejor razón
 # todavía para que git jamás intente tocarlas.
-observatorio/var/
+var/
 
 .DS_Store
 *.log
