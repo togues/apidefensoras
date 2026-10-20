@@ -157,6 +157,10 @@ if (!empty($_GET['comunidad_id'])) {
     $condiciones[] = 'comunidad_id = :comunidad_id';
     $parametros['comunidad_id'] = (int) $_GET['comunidad_id'];
 }
+if (!empty($_GET['departamento_id'])) {
+    $condiciones[] = 'departamento_id = :departamento_id';
+    $parametros['departamento_id'] = (int) $_GET['departamento_id'];
+}
 if (!empty($_GET['canton_id'])) {
     $condiciones[] = 'canton_id = :canton_id';
     $parametros['canton_id'] = (int) $_GET['canton_id'];
