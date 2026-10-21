@@ -51,8 +51,8 @@ if (!empty($_GET['departamento_id'])) {
 }
 if (!empty($_GET['q'])) {
     // Busca en lo que YA es público — resumen_publico, el tipo de
-    // hecho, el cantón —, nunca en descripcion (el relato original,
-    // que nunca sale de acá — regla 6). Tres nombres de parámetro
+    // hecho, el cantón —, nunca en descripcion: el relato original
+    // puede tener lo que el administrador quitó antes de publicar. Tres nombres de parámetro
     // repitiendo el mismo valor: con EMULATE_PREPARES=false + pgsql,
     // el mismo :nombre no se puede reutilizar dos veces en una
     // consulta (bug ya conocido, ver admin/casos.php).
