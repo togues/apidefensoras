@@ -57,7 +57,7 @@ if (ObFiltroContenido::tieneCaracteresInvalidos($resumenPublico)) {
     obJsonResponse(false, null, 'El texto tiene caracteres inválidos', 400, 'CARACTERES_INVALIDOS');
 }
 
-$revision = ObFiltroContenido::revisar($resumenPublico);
+$revision = ObFiltroContenido::revisarParaMuro($resumenPublico);
 $hallazgos = $revision['hallazgos'];
 // Un teléfono o un correo en el muro señala a alguien: se avisa siempre.
 if (preg_match('/(?<!\d)\d{4}[\s.-]?\d{4}(?!\d)/', $resumenPublico) === 1) {
