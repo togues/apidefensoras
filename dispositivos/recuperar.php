@@ -32,9 +32,8 @@ if ($codigoRecuperacion === '') {
 $pdo = obDb();
 
 $stmt = $pdo->prepare(
-    'SELECT d.id, d.perfil_completo, c.id AS comunidad_id, c.nombre AS comunidad_nombre
+    'SELECT d.id, d.perfil_completo, d.alias, d.departamento_id
      FROM dispositivo d
-         LEFT JOIN comunidad c ON c.id = d.comunidad_id
      WHERE d.hash_codigo_recup = :hash AND d.activo = TRUE'
 );
 $stmt->execute(['hash' => obHashCodigoRecuperacion($codigoRecuperacion)]);
@@ -79,8 +78,11 @@ while ($intentosRestantes > 0) {
 obJsonResponse(true, [
     'token' => $tokenNuevo,
     'codigo_recuperacion' => $codigoRecuperacionNuevo,
-    'comunidad' => $dispositivo['comunidad_id'] !== null
-        ? ['id' => (int) $dispositivo['comunidad_id'], 'nombre' => $dispositivo['comunidad_nombre']]
-        : null,
+    // Alias y departamento para que el teléfono nuevo vuelva a tener
+    // nombre en la red y proponga el departamento en "¿Dónde fue?". Nunca
+    // sexo ni estructura (regla 2). La comunidad ya no se usa (012).
+    'alias' => $dispositivo['alias'],
+    'departamento_id' => $dispositivo['departamento_id'] !== null ? (int) $dispositivo['departamento_id'] : null,
+    'comunidad' => null,
     'perfil_completo' => (bool) $dispositivo['perfil_completo'],
 ], null, 200);
