@@ -6,7 +6,7 @@
  * persona eligió al registrarse, nunca personal. Antes era el cantón de
  * la comunidad del código de ingreso; desde la migración 012 el código
  * no dice de qué comunidad es nadie. Si la persona no dijo su
- * departamento, cuenta todo el país.
+ * departamento, cuenta todos los reportes (ámbito "todos").
  * mostrar_numero es FALSE con menos de 5 hechos en el periodo —un número
  * bajo y exacto permite inferir quién reportó (mismo umbral de
  * v_participacion_agregada, regla 2)—.
@@ -38,7 +38,7 @@ $hechos = (int) $stmt->fetchColumn();
 
 obJsonResponse(true, [
     'periodo' => 'mes',
-    'ambito' => $departamentoId !== null ? 'departamento' : 'pais',
+    'ambito' => $departamentoId !== null ? 'departamento' : 'todos',
     'hechos' => $hechos,
     'mostrar_numero' => $hechos >= 5,
 ], null, 200);

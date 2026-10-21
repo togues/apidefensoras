@@ -96,6 +96,20 @@ foreach ($body['reportes'] as $item) {
         continue;
     }
 
+    // Departamento donde ocurrió (migración 012): lo elige la persona en
+    // "¿Dónde fue?". comunidad_id se sigue aceptando solo para las apps
+    // instaladas antes de la 012.
+    $departamentoId = null;
+    if (isset($item['departamento_id']) && $item['departamento_id'] !== null) {
+        $departamentoId = (int) $item['departamento_id'];
+        $existeDepartamento = $pdo->prepare('SELECT 1 FROM departamento WHERE id = :id');
+        $existeDepartamento->execute(['id' => $departamentoId]);
+        if ($existeDepartamento->fetchColumn() === false) {
+            $resultados[] = ['uuid_local' => $uuidLocal, 'estado' => 'rechazado', 'code' => 'DATOS_INVALIDOS'];
+            continue;
+        }
+    }
+
     $comunidadId = null;
     if (isset($item['comunidad_id']) && $item['comunidad_id'] !== null) {
         $comunidadId = (int) $item['comunidad_id'];
@@ -160,13 +174,13 @@ foreach ($body['reportes'] as $item) {
         $insertar = $pdo->prepare(
             'INSERT INTO reporte (
                 uuid_local, dispositivo_id, tipo_vulneracion_id, descripcion,
-                entidad_mencionada, referencia_lugar, geom, comunidad_id,
+                entidad_mencionada, referencia_lugar, geom, comunidad_id, departamento_id,
                 fecha_incidente, precision_fecha, prioridad, marcado_anomalo
             ) VALUES (
                 :uuid_local, :dispositivo_id, :tipo_vulneracion_id, :descripcion,
                 :entidad_mencionada, :referencia_lugar,
                 CASE WHEN :tiene_punto THEN ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) ELSE NULL END,
-                :comunidad_id, :fecha_incidente, :precision_fecha, :prioridad, :marcado_anomalo
+                :comunidad_id, :departamento_id, :fecha_incidente, :precision_fecha, :prioridad, :marcado_anomalo
             )
             RETURNING id, folio, canton_id'
         );
@@ -187,6 +201,7 @@ foreach ($body['reportes'] as $item) {
             'lat' => $lat,
             'lon' => $lon,
             'comunidad_id' => $comunidadId,
+            'departamento_id' => $departamentoId,
             'fecha_incidente' => $fechaIncidente,
             'precision_fecha' => $precisionFecha,
             'prioridad' => $prioridad,

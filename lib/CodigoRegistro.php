@@ -1,10 +1,11 @@
 <?php
 
 /**
- * Código de registro (tabla codigo_comunidad, migración 012): una
- * palabra o frase que REDNA reparte para controlar quién se registra en
- * la app durante una capacitación o una gira. No dice nada de la persona
- * ni de su comunidad. Ver docs/decision-08-codigo-de-registro.md.
+ * Código de registro (tabla codigo_comunidad, migración 012): una o dos
+ * palabras cortas (máximo 20 caracteres) que REDNA reparte para
+ * controlar quién se registra en la app durante una capacitación o una
+ * gira. No tiene nada que ver con ubicación, cartografía ni comunidad.
+ * Ver docs/decision-08-codigo-de-registro.md.
  *
  * Se guarda y se compara NORMALIZADO, para que "Monseñor Fiallos",
  * "monsenor  fiallos" y "MONSEÑOR FIALLOS" sean el mismo código: quien
@@ -12,8 +13,8 @@
  * normaliza igual (app/js/features/ingreso/enrolar.js).
  */
 
-const OB_CODIGO_REGISTRO_MIN = 6;
-const OB_CODIGO_REGISTRO_MAX = 40;
+const OB_CODIGO_REGISTRO_MIN = 4;
+const OB_CODIGO_REGISTRO_MAX = 20;
 
 function obNormalizarCodigoRegistro(string $texto): string
 {
