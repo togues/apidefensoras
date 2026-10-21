@@ -64,6 +64,9 @@ $opcionesFiltros = static function (PDO $pdo): array {
         'tipos' => $enteros($pdo->query(
             'SELECT id, nombre, familia FROM tipo_vulneracion WHERE activo = TRUE ORDER BY familia, orden'
         )->fetchAll(), ['id']),
+        'organizaciones' => $enteros($pdo->query(
+            'SELECT id, nombre FROM estructura_organizativa WHERE activo = TRUE ORDER BY orden, nombre'
+        )->fetchAll(), ['id']),
     ];
 };
 
@@ -203,6 +206,15 @@ $comunidades = $consultar(
      FROM v_reporte_territorio r $where AND r.comunidad_id IS NOT NULL
      GROUP BY r.comunidad_id, r.comunidad, r.departamento ORDER BY total DESC, r.comunidad LIMIT 15"
 );
+// A qué organización le toca el seguimiento (migración 011) — incluye
+// "Sin asignar", lo que REDNA todavía tiene que repartir.
+$organizaciones = $consultar(
+    "SELECT COALESCE(r.organizacion_seguimiento_id::text, 'sin_asignar') AS organizacion_id,
+            COALESCE(r.organizacion_seguimiento, 'Sin asignar') AS organizacion, COUNT(*) AS total
+     FROM v_reporte_territorio r $where
+     GROUP BY 1, 2
+     ORDER BY (COALESCE(r.organizacion_seguimiento_id::text, 'sin_asignar') = 'sin_asignar'), total DESC"
+);
 $estados = $consultar(
     "SELECT r.estado, COUNT(*) AS total FROM v_reporte_territorio r $where GROUP BY r.estado ORDER BY total DESC"
 );
@@ -259,6 +271,7 @@ $respuesta = [
     'departamentos' => $enteros($departamentos, ['departamento_id', 'total']),
     'comunidades' => $enteros($comunidades, ['comunidad_id', 'total']),
     'estados' => $enteros($estados, ['total']),
+    'organizaciones' => $enteros($organizaciones, ['total']),
     'entidades' => $enteros($entidades, ['total']),
     'reincidencias' => $enteros($reincidencias, ['comunidad_id', 'tipo_vulneracion_id', 'total']),
 ];

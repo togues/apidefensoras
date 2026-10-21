@@ -22,6 +22,7 @@
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../lib/FiltrosReporte.php';
+require_once __DIR__ . '/../lib/Seguimiento.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
@@ -71,8 +72,17 @@ if ($metodo === 'PATCH') {
     if ($estadoNuevo !== null && !in_array($estadoNuevo, ['recibido', 'en_investigacion', 'cerrado', 'descartado'], true)) {
         obJsonResponse(false, null, 'Estado inválido', 400, 'DATOS_INVALIDOS');
     }
-    if ($estadoNuevo === null && ($nota === null || $nota === '')) {
-        obJsonResponse(false, null, 'Mandá un estado nuevo, una nota, o los dos', 400, 'DATOS_INCOMPLETOS');
+    // organizacion_seguimiento_id (migración 011): null o '' = quitar.
+    $cambiaOrganizacion = array_key_exists('organizacion_seguimiento_id', $body);
+    $organizacion = [null, null];
+    if ($cambiaOrganizacion) {
+        $organizacion = obOrganizacionSeguimiento($pdo, $body['organizacion_seguimiento_id']);
+        if ($organizacion === null) {
+            obJsonResponse(false, null, 'Organización no encontrada', 400, 'DATOS_INVALIDOS');
+        }
+    }
+    if ($estadoNuevo === null && ($nota === null || $nota === '') && !$cambiaOrganizacion) {
+        obJsonResponse(false, null, 'Mandá un estado nuevo, una nota, una organización de seguimiento, o varios', 400, 'DATOS_INCOMPLETOS');
     }
     // Descartar sin decir por qué deja a quien revise después sin poder
     // saber si fue por contenido inapropiado, un caso repetido, o un
@@ -81,7 +91,13 @@ if ($metodo === 'PATCH') {
         obJsonResponse(false, null, 'Descartar un caso requiere anotar el motivo', 400, 'NOTA_REQUERIDA');
     }
 
-    obTransaccion(function (PDO $pdo) use ($id, $estadoActual, $estadoNuevo, $nota, $usuarioPanel) {
+    obTransaccion(function (PDO $pdo) use ($id, $estadoActual, $estadoNuevo, $nota, $usuarioPanel, $cambiaOrganizacion, $organizacion) {
+        if ($cambiaOrganizacion) {
+            obAsignarSeguimiento($pdo, $id, $organizacion[0], $organizacion[1], (int) $usuarioPanel['id']);
+        }
+        if ($estadoNuevo === null && ($nota === null || $nota === '')) {
+            return; // solo cambió la organización
+        }
         if ($estadoNuevo !== null && $estadoNuevo !== $estadoActual) {
             $actualizar = $pdo->prepare('UPDATE reporte SET estado = :estado WHERE id = :id');
             $actualizar->execute(['estado' => $estadoNuevo, 'id' => $id]);
@@ -151,20 +167,10 @@ if ($id !== null) {
 // ------------------------------------------------------------------
 // Listado con filtros
 // ------------------------------------------------------------------
-// Mismos filtros que el tablero de Análisis — lib/FiltrosReporte.php.
+// Mismos filtros que el tablero de Análisis (incluida la búsqueda por
+// texto `q`) — lib/FiltrosReporte.php.
 ['condiciones' => $condiciones, 'parametros' => $parametros] = obFiltrosReporte($_GET);
 
-if (!empty($_GET['q'])) {
-    // PDO nativo (EMULATE_PREPARES=false) contra pgsql no reutiliza de
-    // forma confiable el mismo parámetro con nombre dos veces en una
-    // consulta — bug ya encontrado antes en reportes/sync.php y
-    // MotorAlertas.php. Tres nombres distintos, mismo valor.
-    $condiciones[] = '(folio ILIKE :q1 OR descripcion ILIKE :q2 OR comunidad ILIKE :q3)';
-    $textoBusqueda = '%' . $_GET['q'] . '%';
-    $parametros['q1'] = $textoBusqueda;
-    $parametros['q2'] = $textoBusqueda;
-    $parametros['q3'] = $textoBusqueda;
-}
 
 $where = $condiciones ? 'WHERE ' . implode(' AND ', $condiciones) : '';
 
@@ -178,7 +184,7 @@ $totalFilas = (int) $total->fetchColumn();
 
 $sql = "SELECT id, folio, familia, naturaleza, tipo_hecho AS tipo, estado, prioridad,
                comunidad, canton, distrito, municipio, departamento,
-               fecha_registro, evidencias, marcado_anomalo, publicado
+               fecha_registro, evidencias, marcado_anomalo, publicado, organizacion_seguimiento
         FROM v_reporte_territorio
         $where
         ORDER BY fecha_registro DESC

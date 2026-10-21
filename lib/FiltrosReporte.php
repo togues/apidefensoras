@@ -69,6 +69,25 @@ function obFiltrosReporte(array $entrada, string $alias = ''): array
         $condiciones[] = $col('marcado_anomalo') . ' = :marcado_anomalo';
         $parametros['marcado_anomalo'] = filter_var($entrada['marcado_anomalo'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
     }
+    // Organización responsable del seguimiento (migración 011) — una
+    // decisión de REDNA sobre el caso, nunca la estructura de quien
+    // reporta. 'sin_asignar' = todavía nadie lo asignó.
+    if (($entrada['organizacion_seguimiento_id'] ?? '') === 'sin_asignar') {
+        $condiciones[] = $col('organizacion_seguimiento_id') . ' IS NULL';
+    } elseif (!empty($entrada['organizacion_seguimiento_id']) && (int) $entrada['organizacion_seguimiento_id'] > 0) {
+        $condiciones[] = $col('organizacion_seguimiento_id') . ' = :organizacion_seguimiento_id';
+        $parametros['organizacion_seguimiento_id'] = (int) $entrada['organizacion_seguimiento_id'];
+    }
+    if (!empty($entrada['q'])) {
+        // PDO nativo (EMULATE_PREPARES=false) contra pgsql no reutiliza
+        // de forma confiable el mismo parámetro con nombre dos veces —
+        // bug ya visto en reportes/sync.php. Tres nombres, mismo valor.
+        $condiciones[] = '(' . $col('folio') . ' ILIKE :q1 OR ' . $col('descripcion') . ' ILIKE :q2 OR ' . $col('comunidad') . ' ILIKE :q3)';
+        $texto = '%' . $entrada['q'] . '%';
+        $parametros['q1'] = $texto;
+        $parametros['q2'] = $texto;
+        $parametros['q3'] = $texto;
+    }
     if (!empty($entrada['desde']) && ($desde = obLimiteDeDia((string) $entrada['desde'], false)) !== null) {
         $condiciones[] = $col('fecha_registro') . ' >= :desde';
         $parametros['desde'] = $desde;

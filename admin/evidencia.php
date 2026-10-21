@@ -94,8 +94,8 @@ if ($metodo === 'DELETE') {
         $borrar->execute(['id' => $id]);
 
         $seguimiento = $pdo->prepare(
-            'INSERT INTO seguimiento_caso (reporte_id, usuario_id, nota)
-             VALUES (:reporte_id, :usuario_id, :nota)'
+            'INSERT INTO seguimiento_caso (reporte_id, usuario_id, nota, automatica)
+             VALUES (:reporte_id, :usuario_id, :nota, TRUE)'
         );
         $seguimiento->execute([
             'reporte_id' => $fila['reporte_id'],

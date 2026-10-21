@@ -50,8 +50,8 @@ obTransaccion(function (PDO $pdo) use ($id, $resumenPublico, $usuarioPanel) {
     $publicar->execute(['resumen' => $resumenPublico, 'id' => $id]);
 
     $seguimiento = $pdo->prepare(
-        'INSERT INTO seguimiento_caso (reporte_id, usuario_id, estado_anterior, estado_nuevo, nota)
-         VALUES (:reporte_id, :usuario_id, NULL, NULL, :nota)'
+        'INSERT INTO seguimiento_caso (reporte_id, usuario_id, estado_anterior, estado_nuevo, nota, automatica)
+         VALUES (:reporte_id, :usuario_id, NULL, NULL, :nota, TRUE)'
     );
     $seguimiento->execute([
         'reporte_id' => $id,
