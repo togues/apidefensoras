@@ -4,16 +4,14 @@
  * GET /api/v1/admin/estadisticas — api_v1.md, sección 4, fila
  * "GET /admin/estadisticas | Indicadores agregados | operador".
  *
- * Primer endpoint del panel. Todo lo que necesita la vista "Resumen" de
- * diseno/tablero_completo.html en una sola llamada: KPIs, la serie
- * mensual por familia, los casos más recientes, las alertas abiertas y
- * los tipos de hecho más frecuentes. Sobre v_reporte_territorio
- * (migración 005) — nunca toca dispositivo, sexo ni estructura.
+ * Alimenta la vista Resumen, que desde el 2026-10-20 es OPERATIVA: qué
+ * necesita atención hoy, sin filtros. Lo analítico (series largas,
+ * distribuciones, territorio, tipos de hecho) se mudó al tablero de
+ * Análisis, con filtros en cascada (admin/analisis.php) — antes las dos
+ * vistas repetían la misma serie mensual y los mismos tipos frecuentes.
+ * Decisión de Marco.
  *
- * Ventana fija de 6 meses para todo lo que es "del período" (serie,
- * tipos frecuentes, total_periodo): es lo que pide el mockup y no hay
- * todavía un selector de rango en el contrato. Cuando lo haya, este
- * archivo es el que se actualiza — no hace falta migración.
+ * Sobre v_reporte_territorio — nunca toca sexo ni estructura.
  */
 
 require_once __DIR__ . '/../config.php';
@@ -27,68 +25,57 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
 }
 
 $pdo = obDb();
+$tz = $pdo->quote(API_TIMEZONE);
 
-// ------------------------------------------------------------------
-// KPIs
-// ------------------------------------------------------------------
+// "Pendiente" = todavía nadie lo cerró ni lo descartó.
+$pendiente = "estado IN ('recibido', 'en_investigacion')";
+
+// Por DÍA de El Salvador, no ventanas móviles de horas: así cada
+// indicador cuenta exactamente lo mismo que Casos cuando el panel lo
+// abre ya filtrado (Casos filtra por día — lib/FiltrosReporte.php).
+$dia = "(fecha_registro AT TIME ZONE $tz)::date";
+$hoy = "(NOW() AT TIME ZONE $tz)::date";
+
 $kpis = $pdo->query(
     "SELECT
-        COUNT(*) FILTER (WHERE estado = 'recibido')                                   AS sin_revisar,
-        COUNT(*) FILTER (WHERE estado = 'en_investigacion')                           AS en_investigacion,
-        COUNT(*) FILTER (WHERE fecha_registro >= NOW() - INTERVAL '6 months')         AS total_periodo,
-        COUNT(*) FILTER (WHERE fecha_registro >= date_trunc('month', NOW()))          AS total_mes,
-        COUNT(*) FILTER (WHERE marcado_anomalo = TRUE)                                AS marcados_anomalos
+        COUNT(*) FILTER (WHERE estado = 'recibido')                          AS sin_revisar,
+        COUNT(*) FILTER (WHERE estado = 'recibido' AND $dia <= $hoy - 8)      AS sin_revisar_mas_7_dias,
+        COUNT(*) FILTER (WHERE estado = 'en_investigacion')                  AS en_investigacion,
+        COUNT(*) FILTER (WHERE prioridad = 'alta' AND $pendiente)            AS alta_prioridad_pendiente,
+        COUNT(*) FILTER (WHERE marcado_anomalo AND $pendiente)               AS anomalos_pendientes,
+        COUNT(*) FILTER (WHERE $dia >= $hoy - 6)                             AS recibidos_7_dias,
+        COUNT(*) FILTER (WHERE $dia BETWEEN $hoy - 13 AND $hoy - 7)          AS recibidos_7_dias_anteriores
      FROM v_reporte_territorio"
 )->fetch();
 
-$dispositivosActivos = (int) $pdo->query(
-    "SELECT COUNT(*) FROM dispositivo WHERE activo = TRUE"
-)->fetchColumn();
+$alertasAbiertas = (int) $pdo->query("SELECT COUNT(*) FROM alerta WHERE estado = 'abierta'")->fetchColumn();
+$dispositivosActivos = (int) $pdo->query('SELECT COUNT(*) FROM dispositivo WHERE activo = TRUE')->fetchColumn();
 
-// ------------------------------------------------------------------
-// Serie mensual por familia — 6 meses, con los meses sin datos en cero
-// (generate_series para no perder un mes solo porque no llegó nada).
-// ------------------------------------------------------------------
-$serieRaw = $pdo->query(
-    "SELECT to_char(gs.mes_actual, 'YYYY-MM') AS mes, fam.codigo AS familia, COALESCE(c.total, 0) AS total
-     FROM generate_series(date_trunc('month', NOW() - INTERVAL '5 months'), date_trunc('month', NOW()), INTERVAL '1 month') AS gs(mes_actual)
-     CROSS JOIN familia fam
-     LEFT JOIN (
-         SELECT date_trunc('month', fecha_registro) AS mes, familia, COUNT(*) AS total
-         FROM v_reporte_territorio
-         WHERE fecha_registro >= date_trunc('month', NOW() - INTERVAL '5 months')
-         GROUP BY 1, 2
-     ) c ON c.mes = gs.mes_actual AND c.familia = fam.codigo
-     WHERE fam.activo = TRUE
-     ORDER BY gs.mes_actual, fam.orden"
+// Pulso de los últimos 30 días, por día de El Salvador, con los días
+// sin reportes en cero.
+$actividad = $pdo->query(
+    "SELECT to_char(gs.dia, 'YYYY-MM-DD') AS dia, COUNT(r.id) AS total
+     FROM generate_series((NOW() AT TIME ZONE $tz)::date - 29, (NOW() AT TIME ZONE $tz)::date, INTERVAL '1 day') AS gs(dia)
+     LEFT JOIN v_reporte_territorio r ON (r.fecha_registro AT TIME ZONE $tz)::date = gs.dia::date
+     GROUP BY gs.dia ORDER BY gs.dia"
 )->fetchAll();
 
-$meses = [];
-$porFamilia = [];
-foreach ($serieRaw as $fila) {
-    if (!in_array($fila['mes'], $meses, true)) {
-        $meses[] = $fila['mes'];
-    }
-    $porFamilia[$fila['familia']][] = (int) $fila['total'];
-}
-$series = [];
-foreach ($porFamilia as $familia => $datos) {
-    $series[] = ['familia' => $familia, 'datos' => $datos];
-}
-
-// ------------------------------------------------------------------
-// Casos recientes
-// ------------------------------------------------------------------
-$casosRecientes = $pdo->query(
-    "SELECT folio, comunidad, canton, tipo_hecho AS tipo, familia, estado, prioridad, fecha_registro
+// La bandeja: lo pendiente, primero lo urgente y después lo que más
+// lleva esperando — no lo más nuevo (para eso está "Lo último").
+$pendientes = $pdo->query(
+    "SELECT id, folio, comunidad, tipo_hecho AS tipo, familia, estado, prioridad, fecha_registro, marcado_anomalo,
+            EXTRACT(DAY FROM NOW() - fecha_registro)::int AS dias_esperando
      FROM v_reporte_territorio
-     ORDER BY fecha_registro DESC
-     LIMIT 6"
+     WHERE $pendiente
+     ORDER BY CASE prioridad WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END, fecha_registro ASC
+     LIMIT 8"
 )->fetchAll();
 
-// ------------------------------------------------------------------
-// Alertas activas
-// ------------------------------------------------------------------
+$recientes = $pdo->query(
+    "SELECT id, folio, comunidad, tipo_hecho AS tipo, familia, estado, prioridad, fecha_registro
+     FROM v_reporte_territorio ORDER BY fecha_registro DESC LIMIT 6"
+)->fetchAll();
+
 $alertasActivas = $pdo->query(
     "SELECT a.id, ra.nombre AS regla, ct.nombre AS canton, a.conteo_actual, ra.umbral,
             a.fecha_disparo,
@@ -100,40 +87,29 @@ $alertasActivas = $pdo->query(
      ORDER BY a.fecha_disparo DESC"
 )->fetchAll();
 
-// ------------------------------------------------------------------
-// Tipos de hecho más frecuentes (6 meses)
-// ------------------------------------------------------------------
-$tiposFrecuentes = $pdo->query(
-    "SELECT tipo_hecho AS tipo, familia, COUNT(*) AS total
-     FROM v_reporte_territorio
-     WHERE fecha_registro >= NOW() - INTERVAL '6 months'
-     GROUP BY tipo_hecho, familia
-     ORDER BY total DESC
-     LIMIT 10"
-)->fetchAll();
+$casos = static fn (array $filas) => array_map(static function (array $c): array {
+    $c['id'] = (int) $c['id'];
+    if (array_key_exists('dias_esperando', $c)) {
+        $c['dias_esperando'] = (int) $c['dias_esperando'];
+    }
+    if (array_key_exists('marcado_anomalo', $c)) {
+        $c['marcado_anomalo'] = (bool) $c['marcado_anomalo'];
+    }
+    return $c;
+}, $filas);
 
 obJsonResponse(true, [
-    'kpis' => [
-        'sin_revisar' => (int) $kpis['sin_revisar'],
-        'en_investigacion' => (int) $kpis['en_investigacion'],
-        'total_periodo' => (int) $kpis['total_periodo'],
-        'total_mes' => (int) $kpis['total_mes'],
-        'marcados_anomalos' => (int) $kpis['marcados_anomalos'],
+    'kpis' => array_map('intval', $kpis) + [
+        'alertas_abiertas' => $alertasAbiertas,
         'dispositivos_activos' => $dispositivosActivos,
     ],
-    'serie_mensual' => [
-        'meses' => $meses,
-        'series' => $series,
-    ],
-    'casos_recientes' => $casosRecientes,
+    'actividad' => array_map(static fn (array $a) => ['dia' => $a['dia'], 'total' => (int) $a['total']], $actividad),
+    'pendientes' => $casos($pendientes),
+    'recientes' => $casos($recientes),
     'alertas_activas' => array_map(static function (array $a): array {
         $a['conteo_actual'] = (int) $a['conteo_actual'];
         $a['umbral'] = (int) $a['umbral'];
         $a['notificados'] = (int) $a['notificados'];
         return $a;
     }, $alertasActivas),
-    'tipos_frecuentes' => array_map(static function (array $t): array {
-        $t['total'] = (int) $t['total'];
-        return $t;
-    }, $tiposFrecuentes),
 ], null, 200);

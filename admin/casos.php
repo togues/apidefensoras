@@ -21,6 +21,7 @@
  */
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../lib/FiltrosReporte.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
@@ -150,41 +151,9 @@ if ($id !== null) {
 // ------------------------------------------------------------------
 // Listado con filtros
 // ------------------------------------------------------------------
-$condiciones = [];
-$parametros = [];
+// Mismos filtros que el tablero de Análisis — lib/FiltrosReporte.php.
+['condiciones' => $condiciones, 'parametros' => $parametros] = obFiltrosReporte($_GET);
 
-if (!empty($_GET['comunidad_id'])) {
-    $condiciones[] = 'comunidad_id = :comunidad_id';
-    $parametros['comunidad_id'] = (int) $_GET['comunidad_id'];
-}
-if (!empty($_GET['departamento_id'])) {
-    $condiciones[] = 'departamento_id = :departamento_id';
-    $parametros['departamento_id'] = (int) $_GET['departamento_id'];
-}
-if (!empty($_GET['canton_id'])) {
-    $condiciones[] = 'canton_id = :canton_id';
-    $parametros['canton_id'] = (int) $_GET['canton_id'];
-}
-if (!empty($_GET['familia']) && in_array($_GET['familia'], ['persona', 'territorio', 'gestion', 'logro'], true)) {
-    $condiciones[] = 'familia = :familia';
-    $parametros['familia'] = $_GET['familia'];
-}
-if (!empty($_GET['tipo_vulneracion_id'])) {
-    $condiciones[] = 'tipo_vulneracion_id = :tipo_vulneracion_id';
-    $parametros['tipo_vulneracion_id'] = (int) $_GET['tipo_vulneracion_id'];
-}
-if (!empty($_GET['estado']) && in_array($_GET['estado'], ['recibido', 'en_investigacion', 'cerrado', 'descartado'], true)) {
-    $condiciones[] = 'estado = :estado';
-    $parametros['estado'] = $_GET['estado'];
-}
-if (isset($_GET['marcado_anomalo']) && $_GET['marcado_anomalo'] !== '') {
-    $condiciones[] = 'marcado_anomalo = :marcado_anomalo';
-    $parametros['marcado_anomalo'] = filter_var($_GET['marcado_anomalo'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
-}
-if (!empty($_GET['prioridad']) && in_array($_GET['prioridad'], ['alta', 'media', 'baja'], true)) {
-    $condiciones[] = 'prioridad = :prioridad';
-    $parametros['prioridad'] = $_GET['prioridad'];
-}
 if (!empty($_GET['q'])) {
     // PDO nativo (EMULATE_PREPARES=false) contra pgsql no reutiliza de
     // forma confiable el mismo parámetro con nombre dos veces en una
@@ -195,14 +164,6 @@ if (!empty($_GET['q'])) {
     $parametros['q1'] = $textoBusqueda;
     $parametros['q2'] = $textoBusqueda;
     $parametros['q3'] = $textoBusqueda;
-}
-if (!empty($_GET['desde'])) {
-    $condiciones[] = 'fecha_registro >= :desde';
-    $parametros['desde'] = $_GET['desde'];
-}
-if (!empty($_GET['hasta'])) {
-    $condiciones[] = 'fecha_registro <= :hasta';
-    $parametros['hasta'] = $_GET['hasta'];
 }
 
 $where = $condiciones ? 'WHERE ' . implode(' AND ', $condiciones) : '';
