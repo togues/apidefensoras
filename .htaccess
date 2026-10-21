@@ -23,7 +23,6 @@
     RewriteRule ^admin/casos/([0-9]+)/?$ admin/casos.php?id=$1 [QSA,L]
     RewriteRule ^admin/anomalias/([0-9]+)/?$ admin/anomalias.php?id=$1 [QSA,L]
     RewriteRule ^admin/usuarios/([0-9]+)/?$ admin/usuarios.php?id=$1 [QSA,L]
-    RewriteRule ^admin/comunidades/([0-9]+)/codigos/?$ admin/comunidades.php?id=$1 [QSA,L]
     RewriteRule ^admin/comunidades/([0-9]+)/?$ admin/comunidades.php?id=$1 [QSA,L]
     RewriteRule ^admin/codigos/([0-9]+)/?$ admin/codigos.php?id=$1 [QSA,L]
     RewriteRule ^admin/evidencias/([0-9]+)/?$ admin/evidencia.php?id=$1 [QSA,L]

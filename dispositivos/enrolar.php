@@ -7,6 +7,7 @@
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../lib/Dispositivo.php';
+require_once __DIR__ . '/../lib/CodigoRegistro.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
@@ -32,25 +33,26 @@ if ($codigoComunidad === '') {
 
 $pdo = obDb();
 
+// El código SOLO controla quién se registra (migración 012): no dice de
+// qué comunidad es la persona, y el dispositivo queda sin comunidad.
+// Cada reporte dice por sí mismo dónde ocurrió.
 // vigente_desde/vigente_hasta (migracion 010): las dos opcionales, NULL
-// en cualquiera de las dos significa "sin tope de ese lado" — un código
-// sin ninguna de las dos fechas se comporta exactamente como antes.
+// en cualquiera de las dos significa "sin tope de ese lado".
 // Mismo mensaje y mismo código de error que un código que nunca existió
 // o que está revocado: que un código esté fuera de su ventana no debe
 // distinguirse desde afuera de "no es un código válido".
 $stmt = $pdo->prepare(
-    'SELECT cc.id AS codigo_comunidad_id, c.id AS comunidad_id, c.nombre AS comunidad_nombre
+    'SELECT cc.id
      FROM codigo_comunidad cc
-     JOIN comunidad c ON c.id = cc.comunidad_id
-     WHERE cc.codigo = :codigo AND cc.activo = TRUE AND c.activo = TRUE
+     WHERE cc.codigo = :codigo AND cc.activo = TRUE
          AND (cc.vigente_desde IS NULL OR cc.vigente_desde <= NOW())
          AND (cc.vigente_hasta IS NULL OR cc.vigente_hasta >= NOW())'
 );
-$stmt->execute(['codigo' => strtoupper($codigoComunidad)]);
-$comunidad = $stmt->fetch();
+$stmt->execute(['codigo' => obNormalizarCodigoRegistro($codigoComunidad)]);
+$codigoId = $stmt->fetchColumn();
 
-if ($comunidad === false) {
-    obJsonResponse(false, null, 'Código de comunidad inválido o revocado', 404, 'CODIGO_NO_RECONOCIDO');
+if ($codigoId === false) {
+    obJsonResponse(false, null, 'Código de registro inválido o vencido', 404, 'CODIGO_NO_RECONOCIDO');
 }
 
 $token = obGenerarTokenDispositivo();
@@ -70,16 +72,15 @@ while ($intentosRestantes > 0) {
 
     try {
         $insertar = $pdo->prepare(
-            'INSERT INTO dispositivo (token_dispositivo, hash_codigo_recup, alias, comunidad_id, codigo_comunidad_id)
-             VALUES (:token, :hash_recup, :alias, :comunidad_id, :codigo_comunidad_id)
+            'INSERT INTO dispositivo (token_dispositivo, hash_codigo_recup, alias, codigo_comunidad_id)
+             VALUES (:token, :hash_recup, :alias, :codigo_comunidad_id)
              RETURNING id'
         );
         $insertar->execute([
             'token' => $tokenHash,
             'hash_recup' => $hashCodigoRecup,
             'alias' => $alias,
-            'comunidad_id' => $comunidad['comunidad_id'],
-            'codigo_comunidad_id' => $comunidad['codigo_comunidad_id'],
+            'codigo_comunidad_id' => (int) $codigoId,
         ]);
         $dispositivoId = (int) $insertar->fetchColumn();
         break;
@@ -100,6 +101,6 @@ while ($intentosRestantes > 0) {
 obJsonResponse(true, [
     'token' => $token,
     'codigo_recuperacion' => $codigoRecuperacion,
-    'comunidad' => ['id' => (int) $comunidad['comunidad_id'], 'nombre' => $comunidad['comunidad_nombre']],
+    'comunidad' => null, // se mantiene la llave para las apps ya instaladas; ver migración 012
     'perfil_completo' => false,
 ], null, 201);

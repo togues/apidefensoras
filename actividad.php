@@ -2,10 +2,14 @@
 
 /**
  * GET /api/v1/actividad — api_v1.md, sección 3.9.
- * Número héroe del Inicio: agregado del cantón del dispositivo, nunca
- * personal. mostrar_numero es FALSE con menos de 5 hechos en el periodo
- * —en un cantón pequeño, un número bajo y exacto permite inferir quién
- * reportó (mismo umbral de v_participacion_agregada, regla 2)—.
+ * Número héroe del Inicio: reportes del mes en el DEPARTAMENTO que la
+ * persona eligió al registrarse, nunca personal. Antes era el cantón de
+ * la comunidad del código de ingreso; desde la migración 012 el código
+ * no dice de qué comunidad es nadie. Si la persona no dijo su
+ * departamento, cuenta todo el país.
+ * mostrar_numero es FALSE con menos de 5 hechos en el periodo —un número
+ * bajo y exacto permite inferir quién reportó (mismo umbral de
+ * v_participacion_agregada, regla 2)—.
  */
 
 require_once __DIR__ . '/config.php';
@@ -19,24 +23,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
 }
 
 $dispositivo = obAutenticarDispositivo();
+$departamentoId = $dispositivo['departamento_id'] !== null ? (int) $dispositivo['departamento_id'] : null;
 
-$cantonStmt = obDb()->prepare('SELECT canton_id FROM comunidad WHERE id = :id');
-$cantonStmt->execute(['id' => $dispositivo['comunidad_id']]);
-$cantonId = $cantonStmt->fetchColumn();
-
-$hechos = 0;
-if ($cantonId !== false && $cantonId !== null) {
-    $stmt = obDb()->prepare(
-        "SELECT COUNT(*) FROM reporte
-         WHERE canton_id = :canton_id
-           AND fecha_registro >= date_trunc('month', NOW())"
-    );
-    $stmt->execute(['canton_id' => $cantonId]);
-    $hechos = (int) $stmt->fetchColumn();
+$sql = "SELECT COUNT(*) FROM v_reporte_territorio
+        WHERE fecha_registro >= date_trunc('month', NOW() AT TIME ZONE 'America/El_Salvador') AT TIME ZONE 'America/El_Salvador'";
+$parametros = [];
+if ($departamentoId !== null) {
+    $sql .= ' AND departamento_id = :departamento_id';
+    $parametros['departamento_id'] = $departamentoId;
 }
+$stmt = obDb()->prepare($sql);
+$stmt->execute($parametros);
+$hechos = (int) $stmt->fetchColumn();
 
 obJsonResponse(true, [
     'periodo' => 'mes',
+    'ambito' => $departamentoId !== null ? 'departamento' : 'pais',
     'hechos' => $hechos,
     'mostrar_numero' => $hechos >= 5,
 ], null, 200);

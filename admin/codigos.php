@@ -1,6 +1,16 @@
 <?php
 
 /**
+ * Códigos de registro (migración 012, docs/decision-08-codigo-de-registro.md):
+ * una palabra o frase que controla quién se registra en la app durante
+ * una ventana de tiempo. No llevan comunidad.
+ *
+ * GET  /api/v1/admin/codigos — todos, vigentes y vencidos/revocados (el
+ *      historial: un código usado nunca se puede volver a crear).
+ * POST /api/v1/admin/codigos — crear: {"codigo": "Aguila verde" | "",
+ *      "vigente_desde": ..., "vigente_hasta": ...}. Sin "codigo", el
+ *      servidor genera uno al azar.
+ *
  * PATCH /api/v1/admin/codigos/{id} — dos cosas distintas por el mismo
  * verbo, igual que admin/usuarios.php con `activo`:
  *
@@ -19,22 +29,73 @@
  */
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../lib/CodigoRegistro.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
 $usuarioPanel = obRequireSesionPanel();
 obRequireRolAdministrador($usuarioPanel);
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'PATCH') {
-    obJsonResponse(false, null, 'Método no permitido', 405, 'METHOD_NOT_ALLOWED');
+$metodo = $_SERVER['REQUEST_METHOD'] ?? '';
+$id = isset($_GET['id']) ? (int) $_GET['id'] : null;
+$pdo = obDb();
+
+if ($metodo === 'GET' && $id === null) {
+    // personas_registradas: cuántos teléfonos se registraron con cada
+    // código. Sirve para saber si la capacitación funcionó; no se cruza
+    // con ningún reporte.
+    $filas = $pdo->query(
+        "SELECT cc.id, cc.codigo, cc.activo, cc.fecha_emision, cc.fecha_revocacion,
+                cc.vigente_desde, cc.vigente_hasta,
+                (SELECT COUNT(*) FROM dispositivo d WHERE d.codigo_comunidad_id = cc.id) AS personas_registradas
+         FROM codigo_comunidad cc
+         ORDER BY cc.fecha_emision DESC"
+    )->fetchAll();
+    obJsonResponse(true, ['codigos' => array_map(static function (array $c): array {
+        $c['activo'] = (bool) $c['activo'];
+        $c['personas_registradas'] = (int) $c['personas_registradas'];
+        return $c;
+    }, $filas)], null, 200);
 }
 
-$id = isset($_GET['id']) ? (int) $_GET['id'] : null;
+if ($metodo === 'POST' && $id === null) {
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    $texto = trim((string) ($body['codigo'] ?? ''));
+    $desde = $body['vigente_desde'] ?? null;
+    $hasta = $body['vigente_hasta'] ?? null;
+
+    if ($texto === '') {
+        $codigo = obGenerarCodigoRegistro($pdo);
+    } else {
+        $codigo = obNormalizarCodigoRegistro($texto);
+        $largo = strlen($codigo);
+        if ($largo < OB_CODIGO_REGISTRO_MIN || $largo > OB_CODIGO_REGISTRO_MAX) {
+            obJsonResponse(false, null, 'El código debe tener entre ' . OB_CODIGO_REGISTRO_MIN . ' y ' . OB_CODIGO_REGISTRO_MAX . ' letras o números', 400, 'DATOS_INVALIDOS');
+        }
+        $existe = $pdo->prepare('SELECT 1 FROM codigo_comunidad WHERE codigo = :codigo');
+        $existe->execute(['codigo' => $codigo]);
+        if ($existe->fetchColumn()) {
+            obJsonResponse(false, null, "El código {$codigo} ya se usó antes y no se puede repetir. Elija otra palabra.", 409, 'CODIGO_YA_USADO');
+        }
+    }
+    if ($desde !== null && $hasta !== null && strtotime((string) $hasta) < strtotime((string) $desde)) {
+        obJsonResponse(false, null, 'La fecha final no puede ser anterior a la inicial', 400, 'DATOS_INVALIDOS');
+    }
+
+    $insertar = $pdo->prepare(
+        'INSERT INTO codigo_comunidad (codigo, activo, vigente_desde, vigente_hasta)
+         VALUES (:codigo, TRUE, :desde, :hasta) RETURNING id'
+    );
+    $insertar->execute(['codigo' => $codigo, 'desde' => $desde, 'hasta' => $hasta]);
+    obJsonResponse(true, ['id' => (int) $insertar->fetchColumn(), 'codigo' => $codigo], null, 201);
+}
+
+if ($metodo !== 'PATCH') {
+    obJsonResponse(false, null, 'Método no permitido', 405, 'METHOD_NOT_ALLOWED');
+}
 if ($id === null) {
     obJsonResponse(false, null, 'Falta el id del código', 400, 'DATOS_INCOMPLETOS');
 }
-
-$pdo = obDb();
 $existe = $pdo->prepare('SELECT id FROM codigo_comunidad WHERE id = :id');
 $existe->execute(['id' => $id]);
 if (!$existe->fetchColumn()) {
