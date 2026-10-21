@@ -40,6 +40,7 @@
  */
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../lib/Miniatura.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
@@ -104,18 +105,32 @@ if ($metodo === 'DELETE') {
     });
 
     @unlink($rutaAbsoluta);
+    @unlink(obRutaMiniatura($rutaAbsoluta)); // "permanente" incluye la copia chica
     obJsonResponse(true, null, null, 200);
 }
 
-$extension = strtolower(pathinfo($rutaAbsoluta, PATHINFO_EXTENSION));
+// ?tam=miniatura — versión chica para la galería y los cuadritos del
+// detalle (lib/Miniatura.php). Si el servidor no puede generarla, se
+// sirve el original: X-Miniatura dice cuál fue, para poder confirmar
+// en producción que GD está disponible sin adivinar.
+$rutaServida = $rutaAbsoluta;
+if (($_GET['tam'] ?? '') === 'miniatura') {
+    $miniatura = obMiniaturaDeEvidencia($rutaAbsoluta);
+    header('X-Miniatura: ' . ($miniatura !== null ? 'generada' : 'original'));
+    if ($miniatura !== null) {
+        $rutaServida = $miniatura;
+    }
+}
+
+$extension = strtolower(pathinfo($rutaServida, PATHINFO_EXTENSION));
 $tiposPorExtension = ['jpg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'];
 $mime = $tiposPorExtension[$extension] ?? 'application/octet-stream';
 
 header('Content-Type: ' . $mime);
-header('Content-Length: ' . filesize($rutaAbsoluta));
+header('Content-Length: ' . filesize($rutaServida));
 // Nunca en un caché compartido (proxy, CDN) — es evidencia sensible; el
 // navegador de quien tiene sesión sí puede quedársela un rato para no
 // repetir la descarga al reabrir el mismo caso.
 header('Cache-Control: private, max-age=300');
 header('X-Content-Type-Options: nosniff');
-readfile($rutaAbsoluta);
+readfile($rutaServida);
