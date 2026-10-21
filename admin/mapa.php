@@ -10,47 +10,78 @@
  * y que hizo falta al construir. Documentar en api_v1.md cuando se
  * arme `GET /admin/casos` de verdad.
  *
- * REGLA 5 DE CLAUDE.md — "ubicación nunca exacta en interfaz": el
- * punto que devuelve este endpoint es el CENTRO de la comunidad
- * (ST_Centroid(comunidad.geom)), nunca reporte.geom. Ese campo ni se
- * toca acá. En un caserío de veinte casas, una coordenada exacta señala
- * una vivienda — con el centro de la comunidad, muchos reportes caen
- * en el mismo punto, y de eso se encarga el agrupado (cluster) del
- * lado del cliente, no una jitter fabricada acá.
+ * REGLA 5 DE CLAUDE.md — dos comportamientos distintos según el rol,
+ * ver docs/decision-06-coordenadas-exactas-mapa-admin.md:
+ *
+ *   - Rol administrador: el punto exacto del reporte (reporte.geom)
+ *     cuando la persona lo marcó, con el centro de la comunidad como
+ *     respaldo cuando no. `es_exacto` le dice al cliente cuál es
+ *     cuál, para no mostrar un respaldo como si fuera un dato de
+ *     campo real.
+ *   - Cualquier otro rol: SIEMPRE el centro de la comunidad
+ *     (ST_Centroid(comunidad.geom)), nunca reporte.geom — el
+ *     comportamiento original, sin cambios. En un caserío de veinte
+ *     casas, el punto exacto de cada reporte a la vez (no uno solo,
+ *     como en el detalle de un caso) señalaría viviendas concretas.
  */
 
 require_once __DIR__ . '/../config.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
-obRequireSesionPanel();
+$usuarioPanel = obRequireSesionPanel();
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
     obJsonResponse(false, null, 'Método no permitido', 405, 'METHOD_NOT_ALLOWED');
 }
 
 $pdo = obDb();
+$esAdministrador = ($usuarioPanel['rol'] ?? '') === 'administrador';
 
-$puntos = $pdo->query(
-    "SELECT r.folio, r.estado, r.familia, r.comunidad, r.canton,
-            ST_Y(ST_Centroid(co.geom)) AS lat, ST_X(ST_Centroid(co.geom)) AS lon
-     FROM v_reporte_territorio r
-         JOIN comunidad co ON co.id = r.comunidad_id
-     WHERE co.geom IS NOT NULL
-     ORDER BY r.fecha_registro DESC"
-)->fetchAll();
+if ($esAdministrador) {
+    $puntos = $pdo->query(
+        "SELECT r.folio, r.estado, r.familia, r.comunidad, r.canton,
+                COALESCE(ST_Y(rep.geom), ST_Y(ST_Centroid(co.geom))) AS lat,
+                COALESCE(ST_X(rep.geom), ST_X(ST_Centroid(co.geom))) AS lon,
+                (rep.geom IS NOT NULL) AS es_exacto
+         FROM v_reporte_territorio r
+             JOIN reporte rep ON rep.id = r.id
+             LEFT JOIN comunidad co ON co.id = r.comunidad_id
+         WHERE rep.geom IS NOT NULL OR co.geom IS NOT NULL
+         ORDER BY r.fecha_registro DESC"
+    )->fetchAll();
 
-$sinUbicacion = (int) $pdo->query(
-    "SELECT COUNT(*) FROM v_reporte_territorio r
-     LEFT JOIN comunidad co ON co.id = r.comunidad_id
-     WHERE co.geom IS NULL"
-)->fetchColumn();
+    $sinUbicacion = (int) $pdo->query(
+        "SELECT COUNT(*) FROM v_reporte_territorio r
+             JOIN reporte rep ON rep.id = r.id
+             LEFT JOIN comunidad co ON co.id = r.comunidad_id
+         WHERE rep.geom IS NULL AND co.geom IS NULL"
+    )->fetchColumn();
+} else {
+    $puntos = $pdo->query(
+        "SELECT r.folio, r.estado, r.familia, r.comunidad, r.canton,
+                ST_Y(ST_Centroid(co.geom)) AS lat, ST_X(ST_Centroid(co.geom)) AS lon,
+                FALSE AS es_exacto
+         FROM v_reporte_territorio r
+             JOIN comunidad co ON co.id = r.comunidad_id
+         WHERE co.geom IS NOT NULL
+         ORDER BY r.fecha_registro DESC"
+    )->fetchAll();
+
+    $sinUbicacion = (int) $pdo->query(
+        "SELECT COUNT(*) FROM v_reporte_territorio r
+         LEFT JOIN comunidad co ON co.id = r.comunidad_id
+         WHERE co.geom IS NULL"
+    )->fetchColumn();
+}
 
 obJsonResponse(true, [
     'puntos' => array_map(static function (array $p): array {
         $p['lat'] = (float) $p['lat'];
         $p['lon'] = (float) $p['lon'];
+        $p['es_exacto'] = (bool) $p['es_exacto'];
         return $p;
     }, $puntos),
     'sin_ubicacion' => $sinUbicacion,
+    'puede_ver_exacto' => $esAdministrador,
 ], null, 200);
