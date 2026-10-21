@@ -76,7 +76,7 @@ $total = $pdo->prepare(
          LEFT JOIN canton ct        ON ct.id = r.canton_id
          LEFT JOIN distrito di      ON di.id = ct.distrito_id
          LEFT JOIN municipio mu     ON mu.id = di.municipio_id
-         LEFT JOIN departamento de  ON de.id = mu.departamento_id
+         LEFT JOIN departamento de  ON de.id = COALESCE(r.departamento_id, mu.departamento_id)
      WHERE $where"
 );
 $total->execute($parametros);
@@ -92,7 +92,7 @@ $stmt = $pdo->prepare(
          LEFT JOIN canton ct        ON ct.id = r.canton_id
          LEFT JOIN distrito di      ON di.id = ct.distrito_id
          LEFT JOIN municipio mu     ON mu.id = di.municipio_id
-         LEFT JOIN departamento de  ON de.id = mu.departamento_id
+         LEFT JOIN departamento de  ON de.id = COALESCE(r.departamento_id, mu.departamento_id)
      WHERE $where
      ORDER BY r.fecha_publicacion DESC
      LIMIT :limite OFFSET :offset"
