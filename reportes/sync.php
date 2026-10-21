@@ -182,7 +182,7 @@ foreach ($body['reportes'] as $item) {
                 CASE WHEN :tiene_punto THEN ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) ELSE NULL END,
                 :comunidad_id, :departamento_id, :fecha_incidente, :precision_fecha, :prioridad, :marcado_anomalo
             )
-            RETURNING id, folio, canton_id'
+            RETURNING id, folio, canton_id, departamento_id'
         );
         // PDO nativo (EMULATE_PREPARES=false) con pgsql no soporta repetir
         // el mismo placeholder nombrado en más de un lugar de la consulta
@@ -231,11 +231,15 @@ foreach ($body['reportes'] as $item) {
         )->execute(['reporte_id' => $reporteId, 'tipo' => $a['tipo']]);
     }
 
-    if ($cantonId === null) {
+    // Desde la migración 012 el lugar del reporte es su departamento: un
+    // reporte sin cantón (sin punto en el mapa) es lo normal. Solo se
+    // marca el que llegó sin departamento, que no se puede ubicar.
+    if ($fila['departamento_id'] === null) {
         $pdo->prepare(
             'INSERT INTO log_anomalia (reporte_id, tipo_anomalia) VALUES (:reporte_id, :tipo)'
         )->execute(['reporte_id' => $reporteId, 'tipo' => 'fuera_de_territorio']);
-    } else {
+    }
+    if ($cantonId !== null) {
         $cantonesTocados[] = $cantonId;
     }
 
