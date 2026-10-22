@@ -23,6 +23,10 @@
  *     comportamiento original, sin cambios. En un caserío de veinte
  *     casas, el punto exacto de cada reporte a la vez (no uno solo,
  *     como en el detalle de un caso) señalaría viviendas concretas.
+ *
+ * Tipo, departamento y fechas van para los filtros y la línea de tiempo
+ * del mapa (pedido de Marco, 22 oct 2026). El relato no: el mapa no lo
+ * muestra, y quien lo necesita abre el caso.
  */
 
 require_once __DIR__ . '/../config.php';
@@ -40,7 +44,9 @@ $esAdministrador = ($usuarioPanel['rol'] ?? '') === 'administrador';
 
 if ($esAdministrador) {
     $puntos = $pdo->query(
-        "SELECT r.folio, r.estado, r.familia, r.comunidad, r.canton,
+        "SELECT r.id, r.folio, r.estado, r.familia, r.comunidad, r.canton,
+                r.tipo_hecho, r.tipo_vulneracion_id, r.departamento, r.departamento_id, r.prioridad,
+                r.fecha_registro, r.fecha_incidente, r.precision_fecha,
                 COALESCE(ST_Y(rep.geom), ST_Y(ST_Centroid(co.geom))) AS lat,
                 COALESCE(ST_X(rep.geom), ST_X(ST_Centroid(co.geom))) AS lon,
                 (rep.geom IS NOT NULL) AS es_exacto
@@ -59,7 +65,9 @@ if ($esAdministrador) {
     )->fetchColumn();
 } else {
     $puntos = $pdo->query(
-        "SELECT r.folio, r.estado, r.familia, r.comunidad, r.canton,
+        "SELECT r.id, r.folio, r.estado, r.familia, r.comunidad, r.canton,
+                r.tipo_hecho, r.tipo_vulneracion_id, r.departamento, r.departamento_id, r.prioridad,
+                r.fecha_registro, r.fecha_incidente, r.precision_fecha,
                 ST_Y(ST_Centroid(co.geom)) AS lat, ST_X(ST_Centroid(co.geom)) AS lon,
                 FALSE AS es_exacto
          FROM v_reporte_territorio r
@@ -80,6 +88,9 @@ obJsonResponse(true, [
         $p['lat'] = (float) $p['lat'];
         $p['lon'] = (float) $p['lon'];
         $p['es_exacto'] = (bool) $p['es_exacto'];
+        $p['id'] = (int) $p['id'];
+        $p['tipo_vulneracion_id'] = $p['tipo_vulneracion_id'] === null ? null : (int) $p['tipo_vulneracion_id'];
+        $p['departamento_id'] = $p['departamento_id'] === null ? null : (int) $p['departamento_id'];
         return $p;
     }, $puntos),
     'sin_ubicacion' => $sinUbicacion,
