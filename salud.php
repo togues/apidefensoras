@@ -25,7 +25,6 @@ try {
 
 obJsonResponse(true, [
     'service' => 'observatorio-api',
-    'env' => API_ENV,
     'timestamp' => date('c'),
     'db' => $dbOk ? 'ok' : 'error',
 ], null, 200);
