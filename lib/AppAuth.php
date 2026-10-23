@@ -39,8 +39,16 @@ function obValidateAppRequest(): bool
 function obRequireAppSecret(): void
 {
     $enforce = defined('API_SECRET_ENFORCE') ? API_SECRET_ENFORCE : 'strict';
-    if ($enforce === 'off' || !defined('API_SECRET') || API_SECRET === '') {
+    if ($enforce === 'off') {
         return;
+    }
+    // Sin secreto configurado y en modo estricto se cierra, no se abre:
+    // un .env incompleto no puede dejar la API a merced de cualquiera.
+    if (!defined('API_SECRET') || API_SECRET === '') {
+        if ($enforce === 'monitor') {
+            return;
+        }
+        obJsonResponse(false, null, 'Configuración del servidor incompleta', 503, 'APP_SECRET_NO_CONFIGURADO');
     }
     if (obValidateAppRequest()) {
         return;

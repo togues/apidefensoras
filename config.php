@@ -113,8 +113,9 @@ try {
         'success' => false,
         'error' => 'Configuración del servidor incompleta',
         'code' => 'CONFIG_BOOTSTRAP_FAILED',
-        'detail' => $e->getMessage(),
     ], JSON_UNESCAPED_UNICODE);
+    // El detalle (con la ruta del servidor) va al registro, no a quien pidió.
+    error_log('[Observatorio API] Configuración incompleta: ' . $e->getMessage());
     exit(1);
 }
 
@@ -124,6 +125,7 @@ require_once __DIR__ . '/lib/PanelAuth.php';
 require_once __DIR__ . '/lib/RateLimiter.php';
 require_once __DIR__ . '/lib/Db.php';
 require_once __DIR__ . '/lib/Respaldo.php';
+require_once __DIR__ . '/lib/SeguridadServidor.php';
 
 // No anunciar la versión de PHP: solo le sirve a quien busca fallas conocidas.
 header_remove('X-Powered-By');

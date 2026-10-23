@@ -18,7 +18,7 @@ require_once __DIR__ . '/../config.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
-obRequireSesionPanel();
+$usuarioPanel = obRequireSesionPanel();
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
     obJsonResponse(false, null, 'Método no permitido', 405, 'METHOD_NOT_ALLOWED');
@@ -76,4 +76,7 @@ obJsonResponse(true, [
     'anomalias_sin_revisar_detalle' => $anomaliasSinRevisarDetalle,
     'catalogo' => ['version' => $versionCatalogo],
     'respaldo' => ['ultimo' => $ultimoRespaldo ?: null],
+    // Solo administrador: versión de PHP y estado de los secretos le
+    // sirven a quien ataca tanto como a quien cuida.
+    'seguridad' => ($usuarioPanel['rol'] ?? '') === 'administrador' ? obChequeosSeguridadServidor() : null,
 ], null, 200);
