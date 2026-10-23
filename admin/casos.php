@@ -7,6 +7,15 @@
  * seguimiento, api_v1.md sección 4 (rol operador). Se agregó junto con
  * el login real (lib/PanelAuth.php) — hasta entonces no había forma
  * honesta de saber quién hacía el cambio para `seguimiento_caso`.
+ * DELETE /api/v1/admin/casos/{id} — borra el caso PERMANENTE, solo rol
+ * administrador. Pedido de 23 de octubre de 2026: "si van a borrar, van
+ * a borrar". Se va todo: el reporte, su bitácora, sus anomalías, sus
+ * fotos (fila y archivo, con la miniatura) y, si estaba en el muro, la
+ * publicación, porque el muro lee del mismo reporte. Para que no se
+ * borre por un toque, el cuerpo trae `confirmar` con el folio exacto.
+ * Lo único que queda es una línea en el registro del servidor (folio,
+ * quién y cuándo, sin nada del contenido). Los respaldos ya generados
+ * lo siguen teniendo hasta que salgan por la retención.
  *
  * Listado con filtros y paginación (4.1) o detalle de un caso. Sobre
  * v_reporte_territorio (migración 005) — nunca dispositivo_id, alias,
@@ -23,13 +32,14 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../lib/FiltrosReporte.php';
 require_once __DIR__ . '/../lib/Seguimiento.php';
+require_once __DIR__ . '/../lib/Miniatura.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
 $usuarioPanel = obRequireSesionPanel();
 
 $metodo = $_SERVER['REQUEST_METHOD'] ?? '';
-if (!in_array($metodo, ['GET', 'PATCH'], true)) {
+if (!in_array($metodo, ['GET', 'PATCH', 'DELETE'], true)) {
     obJsonResponse(false, null, 'Método no permitido', 405, 'METHOD_NOT_ALLOWED');
 }
 
@@ -51,6 +61,55 @@ function obCoordenadaExactaDeReporte(PDO $pdo, int $id): ?array
         return null;
     }
     return ['lat' => (float) $fila['lat'], 'lon' => (float) $fila['lon']];
+}
+
+if ($metodo === 'DELETE') {
+    obRequireRolAdministrador($usuarioPanel);
+    if ($id === null) {
+        obJsonResponse(false, null, 'Falta el id del caso', 400, 'DATOS_INCOMPLETOS');
+    }
+
+    $caso = $pdo->prepare('SELECT folio FROM reporte WHERE id = :id');
+    $caso->execute(['id' => $id]);
+    $folio = $caso->fetchColumn();
+    if ($folio === false) {
+        obJsonResponse(false, null, 'Caso no encontrado', 404, 'REPORTE_NO_ENCONTRADO');
+    }
+
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    if (trim((string) ($body['confirmar'] ?? '')) !== (string) $folio) {
+        obJsonResponse(false, null, 'Para borrar, escriba el folio exacto del caso', 400, 'CONFIRMACION_NO_COINCIDE');
+    }
+
+    $fotos = $pdo->prepare('SELECT ruta_archivo FROM evidencia WHERE reporte_id = :id');
+    $fotos->execute(['id' => $id]);
+    $rutas = $fotos->fetchAll(PDO::FETCH_COLUMN);
+
+    // seguimiento_caso y log_anomalia no tienen cascada; evidencia sí.
+    obTransaccion(function (PDO $pdo) use ($id) {
+        foreach (['seguimiento_caso', 'log_anomalia'] as $tabla) {
+            $pdo->prepare("DELETE FROM $tabla WHERE reporte_id = :id")->execute(['id' => $id]);
+        }
+        $pdo->prepare('DELETE FROM reporte WHERE id = :id')->execute(['id' => $id]);
+    });
+
+    // Los archivos, después de confirmar la base (mismo criterio que
+    // admin/evidencia.php): mejor un archivo huérfano que una fila
+    // apuntando a nada. Solo dentro de var/evidencias.
+    $base = realpath(__DIR__ . '/../var/evidencias');
+    foreach ($rutas as $ruta) {
+        $absoluta = realpath(__DIR__ . '/../var/' . $ruta);
+        if ($base !== false && $absoluta !== false && str_starts_with($absoluta, $base . DIRECTORY_SEPARATOR)) {
+            @unlink($absoluta);
+            @unlink(obRutaMiniatura($absoluta));
+            // rmdir solo borra carpetas vacías: si quedara algo, no se toca.
+            @rmdir(dirname(obRutaMiniatura($absoluta)));
+            @rmdir(dirname($absoluta));
+        }
+    }
+
+    error_log(sprintf('[observatorio] caso %s borrado por el usuario %d', $folio, $usuarioPanel['id']));
+    obJsonResponse(true, ['folio' => $folio], null, 200);
 }
 
 if ($metodo === 'PATCH') {

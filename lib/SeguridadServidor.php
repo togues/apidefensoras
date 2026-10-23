@@ -74,6 +74,14 @@ function obChequeosSeguridadServidor(): array
         $agregar('permisos_env', 'bien', 'Archivo .env', 'Solo lo lee la cuenta del sitio.');
     }
 
+    // No es de seguridad, pero es configuración del servidor: sin GD las
+    // miniaturas no se generan y la galería descarga cada foto completa.
+    if (function_exists('imagecreatetruecolor') && function_exists('imagecreatefromjpeg')) {
+        $agregar('miniaturas', 'bien', 'Miniaturas de las fotos', 'El servidor las genera: la galería carga liviana.');
+    } else {
+        $agregar('miniaturas', 'aviso', 'Miniaturas de las fotos', 'Falta la extensión GD de PHP: la galería descarga cada foto completa. Actívela en cPanel, en «Seleccionar versión de PHP».');
+    }
+
     if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
         $agregar('https', 'bien', 'Conexión segura', 'La API se sirve por HTTPS.');
     } elseif ($esProduccion) {

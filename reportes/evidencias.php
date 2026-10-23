@@ -12,6 +12,7 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../lib/Dispositivo.php';
 require_once __DIR__ . '/../lib/ExifRevalidador.php';
+require_once __DIR__ . '/../lib/Miniatura.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
@@ -116,5 +117,10 @@ try {
     obApiLog('Fallo al insertar evidencia', ['mensaje' => $e->getMessage()]);
     obJsonResponse(false, null, 'No se pudo guardar la fotografía', 500, 'ERROR_INTERNO');
 }
+
+// La miniatura de la galería del panel se hace ya, al recibir la foto,
+// y no la primera vez que alguien la mira. Si el servidor no tiene GD
+// no pasa nada: el panel recibe el original.
+obMiniaturaDeEvidencia($rutaDestino);
 
 obJsonResponse(true, ['id' => $evidenciaId, 'hash_archivo' => $hashArchivo], null, 201);

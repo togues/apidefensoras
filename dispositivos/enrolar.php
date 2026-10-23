@@ -16,8 +16,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     obJsonResponse(false, null, 'Método no permitido', 405, 'METHOD_NOT_ALLOWED');
 }
 
-// api_v1.md, sección 2: 5 por hora por IP.
-obEnforceRateLimit('dispositivos-enrolar', 5, 3600);
+// api_v1.md, sección 2: 100 por hora por IP. Era 5, pero en un taller
+// todos los teléfonos salen por la misma conexión y el sexto quedaba
+// afuera. El código de registro vigente sigue siendo la puerta.
+obEnforceRateLimit('dispositivos-enrolar', 100, 3600);
 
 $body = obLeerCuerpoJson();
 

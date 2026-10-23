@@ -140,8 +140,8 @@ Siguen: reglas de alerta, actores clave, catálogo
 
 - **`huella_dispositivo` no existe.** Se quitó del contrato (`api_v1.md`) por
   decisión de Marco: en una app de denuncia anónima, guardar metadata de
-  aparato es un arma de doble filo. `veces_recuperado` y el límite de
-  5/hora/IP son el control de abuso de la v1.
+  aparato es un arma de doble filo. `veces_recuperado` y los límites por
+  IP (registro 100/hora, recuperar 5/hora) son el control de abuso de la v1.
 - **`X-App-Secret` va primero, en todos los endpoints**, incluidos los que
   además piden token de dispositivo o sesión de panel.
 - **Nada de framework.** Si un endpoint necesita parámetros de ruta
