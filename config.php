@@ -125,6 +125,9 @@ require_once __DIR__ . '/lib/RateLimiter.php';
 require_once __DIR__ . '/lib/Db.php';
 require_once __DIR__ . '/lib/Respaldo.php';
 
+// No anunciar la versión de PHP: solo le sirve a quien busca fallas conocidas.
+header_remove('X-Powered-By');
+
 function obCorsOriginAllowed(string $origin, array $allowedOrigins): bool
 {
     if (CORS_ALLOWED_ORIGINS === '*') {

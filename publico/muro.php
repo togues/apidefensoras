@@ -31,6 +31,9 @@ require_once __DIR__ . '/../config.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
+// Público y sin sesión: el tope evita que alguien lo martille. 300 cada
+// 10 minutos por IP alcanza de sobra para recorrer el muro con filtros.
+obEnforceRateLimit('publico-muro', 300, 600);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
     obJsonResponse(false, null, 'Método no permitido', 405, 'METHOD_NOT_ALLOWED');
@@ -57,7 +60,10 @@ if (!empty($_GET['q'])) {
     // el mismo :nombre no se puede reutilizar dos veces en una
     // consulta (bug ya conocido, ver admin/casos.php).
     $condiciones[] = '(r.resumen_publico ILIKE :q1 OR tv.nombre ILIKE :q2 OR ct.nombre ILIKE :q3)';
-    $textoBusqueda = '%' . $_GET['q'] . '%';
+    // Largo máximo y comodines de ILIKE escapados: la búsqueda es de
+    // palabras, no un patrón que obligue a la base a recorrerlo todo.
+    $q = mb_substr(trim((string) $_GET['q']), 0, 80);
+    $textoBusqueda = '%' . strtr($q, ['\\' => '\\\\', '%' => '\\%', '_' => '\\_']) . '%';
     $parametros['q1'] = $textoBusqueda;
     $parametros['q2'] = $textoBusqueda;
     $parametros['q3'] = $textoBusqueda;

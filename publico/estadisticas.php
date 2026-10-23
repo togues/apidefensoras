@@ -21,6 +21,8 @@ require_once __DIR__ . '/../config.php';
 
 obSetCorsHeaders();
 obRequireAppSecret();
+// Mismo tope que publico/muro: endpoint público y sin sesión.
+obEnforceRateLimit('publico-estadisticas', 300, 600);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
     obJsonResponse(false, null, 'Método no permitido', 405, 'METHOD_NOT_ALLOWED');
