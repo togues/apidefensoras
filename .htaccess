@@ -7,7 +7,7 @@
 # despliegue, docs/08-despliegue.md — porque no viaja en este repositorio
 # (.gitignore) y una regla acá con la ruta escrita a mano se rompe si
 # algún día esta API no vive en /api/v1/.
-<FilesMatch "^\.env|\.sql$|\.log$">
+<FilesMatch "^\.env|\.sql$|\.log$|\.md$|^Dockerfile$">
     Require all denied
 </FilesMatch>
 

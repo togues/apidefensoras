@@ -16,3 +16,9 @@ jobs:
           protocol: ftps
           local-dir: ./
           server-dir: ./
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/*.md
+            Dockerfile
+            .env.example
